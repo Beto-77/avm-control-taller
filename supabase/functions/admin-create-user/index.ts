@@ -26,9 +26,9 @@ function response(status: number, body: Record<string, string>, origin?: string)
 Deno.serve(async (request: Request) => {
   const origin = request.headers.get('Origin') || undefined;
 
-  if (!supabaseUrl || !anonKey || !serviceRoleKey || !appUrlValue) {
-    console.error('Missing required Supabase or APP_URL environment configuration.');
-    return response(500, { error: 'La función de invitaciones no está configurada.' }, origin);
+  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    console.error('Missing required Supabase environment configuration.');
+    return response(500, { error: 'La función de gestión de usuarios no está configurada.' }, origin);
   }
 
   if (origin && !allowedOrigins.includes(origin)) {
@@ -73,7 +73,7 @@ Deno.serve(async (request: Request) => {
       return response(500, { error: 'No se pudo verificar el perfil Administrador.' }, origin);
     }
     if (callerProfile?.role !== 'admin') {
-      return response(403, { error: 'Solo un Administrador puede crear usuarios.' }, origin);
+      return response(403, { error: 'Solo un Administrador puede gestionar usuarios.' }, origin);
     }
 
     let payload: unknown;
@@ -87,12 +87,51 @@ Deno.serve(async (request: Request) => {
     }
 
     const body = payload as Record<string, unknown>;
+    const password = typeof body.password === 'string' ? body.password : '';
+    if (password.length < 8 || password.length > 128) {
+      return response(400, { error: 'La contraseña debe tener entre 8 y 128 caracteres.' }, origin);
+    }
+
+    if (body.action === 'set_password') {
+      const userId = typeof body.user_id === 'string' ? body.user_id : '';
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) {
+        return response(400, { error: 'La cuenta seleccionada no es válida.' }, origin);
+      }
+
+      const { data: targetProfile, error: targetError } = await adminClient
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
+      if (targetError) {
+        console.error('Unable to verify the target profile:', targetError.message);
+        return response(500, { error: 'No se pudo verificar la cuenta seleccionada.' }, origin);
+      }
+      if (!targetProfile) {
+        return response(404, { error: 'No se encontró la cuenta seleccionada.' }, origin);
+      }
+
+      const { error: updatePasswordError } = await adminClient.auth.admin.updateUserById(userId, {
+        password,
+        email_confirm: true
+      });
+      if (updatePasswordError) {
+        console.error('Unable to update user password:', updatePasswordError.message);
+        return response(400, { error: 'No se pudo actualizar la contraseña.' }, origin);
+      }
+      return response(200, { message: 'Contraseña actualizada.' }, origin);
+    }
+
+    if (body.action !== 'create') {
+      return response(400, { error: 'La acción solicitada no es válida.' }, origin);
+    }
+
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
     const displayName = typeof body.display_name === 'string' ? body.display_name.trim() : '';
     const role = body.role;
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
-      return response(400, { error: 'Ingresa un correo electrónico válido.' }, origin);
+      return response(400, { error: 'Ingresa un correo electrónico válido para usar como usuario.' }, origin);
     }
     if (displayName.length < 2 || displayName.length > 80) {
       return response(400, { error: 'El nombre debe tener entre 2 y 80 caracteres.' }, origin);
@@ -101,43 +140,43 @@ Deno.serve(async (request: Request) => {
       return response(400, { error: 'Selecciona un perfil válido.' }, origin);
     }
 
-    const appUrl = new URL(appUrlValue);
-    const { data: inviteData, error: inviteError } = await adminClient.auth.admin
-      .inviteUserByEmail(email, {
-        data: { display_name: displayName },
-        redirectTo: appUrl.origin
-      });
+    const { data: createdUser, error: createError } = await adminClient.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { display_name: displayName }
+    });
 
-    if (inviteError) {
-      console.error('Unable to invite user:', inviteError.message);
-      const message = inviteError.message.toLowerCase().includes('already')
+    if (createError) {
+      console.error('Unable to create user:', createError.message);
+      const message = createError.message.toLowerCase().includes('already')
         ? 'Ya existe una cuenta con ese correo.'
-        : 'No se pudo enviar la invitación. Verifica la configuración de correo de Supabase.';
+        : 'No se pudo crear la cuenta. Verifica los datos e inténtalo nuevamente.';
       return response(400, { error: message }, origin);
     }
-    if (!inviteData.user) {
-      console.error('Supabase returned no user after a successful invite.');
+    if (!createdUser.user) {
+      console.error('Supabase returned no user after creating an account.');
       return response(500, { error: 'Supabase no confirmó la creación de la cuenta.' }, origin);
     }
 
     const { data: updatedProfile, error: updateError } = await adminClient
       .from('profiles')
       .update({ display_name: displayName, role })
-      .eq('id', inviteData.user.id)
+      .eq('id', createdUser.user.id)
       .select('id')
       .maybeSingle();
 
     if (updateError || !updatedProfile) {
-      if (updateError) console.error('Unable to apply invited user profile:', updateError.message);
-      else console.error('The invited user profile was not created by the auth trigger.');
-      return response(500, {
-        error: 'La invitación se envió, pero no se pudo aplicar el perfil. Revisa la cuenta en Equipo.'
-      }, origin);
+      if (updateError) console.error('Unable to apply new user profile:', updateError.message);
+      else console.error('The new user profile was not created by the auth trigger.');
+      const { error: deleteError } = await adminClient.auth.admin.deleteUser(createdUser.user.id);
+      if (deleteError) console.error('Unable to remove incomplete user account:', deleteError.message);
+      return response(500, { error: 'No se pudo completar el perfil. La cuenta incompleta se eliminará automáticamente.' }, origin);
     }
 
-    return response(200, { message: 'Usuario creado e invitación enviada.' }, origin);
+    return response(200, { message: 'Usuario creado.' }, origin);
   } catch (error) {
-    console.error('Unexpected error creating an invited user:', error);
-    return response(500, { error: 'No se pudo completar la invitación.' }, origin);
+    console.error('Unexpected error managing a user:', error);
+    return response(500, { error: 'No se pudo completar la operación.' }, origin);
   }
 });

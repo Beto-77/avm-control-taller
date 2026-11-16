@@ -132,7 +132,7 @@ function renderLogin(message = '') {
           <label>Correo electrónico<input name="email" type="email" autocomplete="username" required /></label>
           <label>Contraseña<input name="password" type="password" autocomplete="current-password" required /></label>
           <button class="button button-primary button-wide" type="submit">Ingresar</button>
-          <button class="text-button" type="button" data-action="reset-password">Olvidé mi contraseña</button>
+          <button class="text-button" type="button" data-action="forgot-password">¿Olvidaste tu contraseña? Contacta al Administrador.</button>
         </form>
       </section>
     </main>`;
@@ -278,7 +278,7 @@ function renderTeam() {
   return `<section class="panel">
     <div class="panel-heading"><div><h2>Cuentas del taller</h2><p>Crea cuentas y asigna sus permisos desde el Administrador.</p></div><button class="button button-primary" data-action="new-user">＋ Crear usuario</button></div>
     ${profiles.length ? `<div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th></th></tr></thead><tbody>${profiles.map((profile) => `<tr><td><b>${esc(profile.display_name || 'Sin nombre')}</b></td><td>${esc(profile.email)}</td><td><span class="badge ${profile.role === 'admin' ? 'badge-blue' : 'badge-gray'}">${profile.role === 'admin' ? 'Administrador' : 'Técnico'}</span></td><td><button class="icon-button" data-action="edit-profile" data-id="${esc(profile.id)}" aria-label="Editar perfil">✎</button></td></tr>`).join('')}</tbody></table></div>` : emptyState('No hay perfiles registrados.')}</section>
-    <div class="quick-note"><span>ⓘ</span><p>Se envía una invitación segura al correo del usuario para que configure su contraseña. No se crean ni comparten contraseñas desde esta aplicación.</p></div>`;
+    <div class="quick-note"><span>ⓘ</span><p>La cuenta inicia sesión con su correo y contraseña. El Administrador define la contraseña inicial y puede establecer una nueva cuando sea necesario. No se envían correos.</p></div>`;
 }
 
 function renderImport() {
@@ -412,42 +412,6 @@ async function handleLogin(event) {
     await refresh();
   } catch (error) {
     renderLogin(errorMessage(error));
-  } finally {
-    setBusy(button, false);
-  }
-}
-
-function passwordResetError(error) {
-  const message = errorMessage(error);
-  const lowerMessage = message.toLowerCase();
-  if (lowerMessage.includes('email address not authorized')) {
-    return 'Supabase aún no puede enviar correos a esta dirección. Configura un proveedor SMTP en Authentication → SMTP Settings.';
-  }
-  if (lowerMessage.includes('rate limit') || lowerMessage.includes('too many requests')) {
-    return 'Se alcanzó el límite de correos de prueba. Inténtalo más tarde o configura un proveedor SMTP en Supabase.';
-  }
-  if (lowerMessage.includes('invalid format') || lowerMessage.includes('invalid email')) {
-    return 'Escribe un correo electrónico válido.';
-  }
-  return message;
-}
-
-async function resetPassword(button) {
-  const input = document.querySelector('#login-form [name="email"]');
-  const email = input?.value.trim();
-  if (!input || !email || !input.checkValidity()) {
-    showToast('Escribe un correo electrónico válido para enviarte el enlace.', 'error');
-    input?.focus();
-    return;
-  }
-
-  setBusy(button, true, 'Enviando enlace…');
-  try {
-    const result = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
-    if (result.error) throw result.error;
-    showToast('Si el correo está registrado, recibirás el enlace de recuperación. Revisa también la carpeta de spam.');
-  } catch (error) {
-    showToast(passwordResetError(error), 'error');
   } finally {
     setBusy(button, false);
   }
@@ -825,16 +789,29 @@ function editProfile(id) {
     <label>Correo electrónico<input value="${esc(profile.email)}" disabled /></label>
     ${roleField}
     <footer class="modal-actions"><button type="button" class="button button-quiet" data-action="close-modal">Cancelar</button><button type="submit" class="button button-primary">Guardar</button></footer>
+  </form>
+  <div class="modal-form"><button type="button" class="button button-quiet" data-action="change-user-password" data-id="${esc(profile.id)}">Establecer nueva contraseña</button></div>`);
+}
+
+function changeUserPasswordForm(profile) {
+  openModal('Establecer contraseña', `<form id="user-password-form" data-id="${esc(profile.id)}" class="modal-form">
+    <p class="muted">Cuenta: <b>${esc(profile.display_name || profile.email)}</b> (${esc(profile.email)})</p>
+    <label>Nueva contraseña<input name="password" type="password" minlength="8" autocomplete="new-password" required /></label>
+    <label>Repetir contraseña<input name="confirm_password" type="password" minlength="8" autocomplete="new-password" required /></label>
+    <p class="muted">Comunica la nueva contraseña al usuario de forma privada.</p>
+    <footer class="modal-actions"><button type="button" class="button button-quiet" data-action="close-modal">Cancelar</button><button type="submit" class="button button-primary">Guardar contraseña</button></footer>
   </form>`);
 }
 
 function createUserForm() {
   return `<form id="create-user-form" class="modal-form">
     <label>Nombre completo<input name="display_name" maxlength="80" autocomplete="name" required /></label>
-    <label>Correo electrónico<input name="email" type="email" maxlength="254" autocomplete="email" required /></label>
+    <label>Usuario (correo electrónico)<input name="email" type="email" maxlength="254" autocomplete="username" required /></label>
+    <label>Contraseña inicial<input name="password" type="password" minlength="8" autocomplete="new-password" required /></label>
+    <label>Repetir contraseña<input name="confirm_password" type="password" minlength="8" autocomplete="new-password" required /></label>
     <label>Perfil<select name="role"><option value="tecnico" selected>Técnico</option><option value="admin">Administrador</option></select></label>
-    <p class="muted">Enviaremos un correo para que configure su propia contraseña.</p>
-    <footer class="modal-actions"><button type="button" class="button button-quiet" data-action="close-modal">Cancelar</button><button type="submit" class="button button-primary">Crear y enviar invitación</button></footer>
+    <p class="muted">La cuenta quedará lista para ingresar sin confirmación por correo. Comparte las credenciales de forma privada.</p>
+    <footer class="modal-actions"><button type="button" class="button button-quiet" data-action="close-modal">Cancelar</button><button type="submit" class="button button-primary">Crear cuenta</button></footer>
   </form>`;
 }
 
@@ -842,14 +819,18 @@ async function createUser(event) {
   event.preventDefault();
   const form = event.target;
   const button = form.querySelector('button[type="submit"]');
-  setBusy(button, true, 'Enviando invitación…');
+  setBusy(button, true, 'Creando cuenta…');
   try {
     const values = formValues(form);
+    if (values.password.length < 8) throw new Error('La contraseña debe tener al menos 8 caracteres.');
+    if (values.password !== values.confirm_password) throw new Error('Las contraseñas no coinciden.');
     const result = await supabase.functions.invoke('admin-create-user', {
       body: {
+        action: 'create',
         email: values.email.trim(),
         display_name: values.display_name.trim(),
-        role: values.role
+        role: values.role,
+        password: values.password
       }
     });
     if (result.error) {
@@ -862,7 +843,41 @@ async function createUser(event) {
     document.querySelector('#modal-root').innerHTML = '';
     await loadData();
     renderApp();
-    showToast(`Cuenta creada. Se envió una invitación a ${values.email.trim()}.`);
+    showToast(`Cuenta creada para ${values.email.trim()}. Comparte la contraseña inicial de forma privada.`);
+  } catch (error) {
+    showToast(errorMessage(error), 'error');
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function setUserPassword(event) {
+  event.preventDefault();
+  const form = event.target;
+  const button = form.querySelector('button[type="submit"]');
+  const values = formValues(form);
+  if (values.password.length < 8) {
+    showToast('La contraseña debe tener al menos 8 caracteres.', 'error');
+    return;
+  }
+  if (values.password !== values.confirm_password) {
+    showToast('Las contraseñas no coinciden.', 'error');
+    return;
+  }
+  setBusy(button, true, 'Guardando…');
+  try {
+    const result = await supabase.functions.invoke('admin-create-user', {
+      body: { action: 'set_password', user_id: form.dataset.id, password: values.password }
+    });
+    if (result.error) {
+      if (result.error.context instanceof Response) {
+        const details = await result.error.context.json();
+        if (typeof details.error === 'string') throw new Error(details.error);
+      }
+      throw result.error;
+    }
+    document.querySelector('#modal-root').innerHTML = '';
+    showToast('Contraseña actualizada. Comunícala al usuario de forma privada.');
   } catch (error) {
     showToast(errorMessage(error), 'error');
   } finally {
@@ -877,6 +892,7 @@ document.addEventListener('submit', (event) => {
   if (event.target.id === 'customer-form') saveCustomer(event);
   if (event.target.id === 'profile-form') saveProfile(event);
   if (event.target.id === 'create-user-form') createUser(event);
+  if (event.target.id === 'user-password-form') setUserPassword(event);
 });
 
 document.addEventListener('click', async (event) => {
@@ -902,8 +918,8 @@ document.addEventListener('click', async (event) => {
       state.customers = [];
       state.profiles = [];
       renderApp();
-    } else if (action === 'reset-password') {
-      await resetPassword(actionButton);
+    } else if (action === 'forgot-password') {
+      showToast('Contacta al Administrador para que establezca una nueva contraseña.');
     } else if (action === 'new-order') {
       editOrder('');
     } else if (action === 'edit-order') {
@@ -915,6 +931,9 @@ document.addEventListener('click', async (event) => {
       if (customer && isAdmin()) openModal('Editar cliente', customerForm(customer));
     } else if (action === 'edit-profile') {
       editProfile(id);
+    } else if (action === 'change-user-password' && isAdmin()) {
+      const profile = state.profiles.find((item) => item.id === id);
+      if (profile) changeUserPasswordForm(profile);
     } else if (action === 'new-user' && isAdmin()) {
       openModal('Crear usuario', createUserForm());
     } else if (action === 'close-modal') {

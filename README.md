@@ -6,7 +6,7 @@ Aplicación web adaptable a celulares y computadoras para el control de motos, �
 
 1. Crea un proyecto Supabase bajo la cuenta de la organización y conserva allí los datos. No compartas la clave `service_role`.
 2. En Supabase, abre **SQL Editor**, ejecuta `supabase/schema.sql` y espera a que termine sin errores.
-3. En **Authentication → Users**, invita el correo que será Administrador. El esquema crea los perfiles nuevos como Técnico por defecto. Luego, desde **SQL Editor**, asigna el primer rol:
+3. En **Authentication → Users**, crea la primera cuenta con su correo y contraseña. Confirma la cuenta al crearla si Supabase muestra esa opción; el esquema crea los perfiles nuevos como Técnico por defecto. Luego, desde **SQL Editor**, asigna el primer rol:
 
    ```sql
    update public.profiles
@@ -14,7 +14,7 @@ Aplicación web adaptable a celulares y computadoras para el control de motos, �
    where email = 'admin@tu-dominio.com';
    ```
 
-4. El Administrador puede crear las cuentas de Técnicos o Administradores desde **Equipo → Crear usuario**. La persona recibe una invitación por correo para configurar su contraseña; no se generan ni se comparten contraseñas en la aplicación. La primera cuenta de Administrador debe seguir creándose inicialmente desde Supabase, según el paso 3.
+4. El Administrador crea las cuentas de Técnicos o Administradores desde **Equipo → Crear usuario**, definiendo el correo de inicio de sesión y una contraseña inicial. Supabase confirma la cuenta sin enviar correo, por lo que no se requiere SMTP. Desde **Equipo → Editar cuenta**, el Administrador también puede establecer una contraseña nueva.
 5. Copia `.env.example` a `.env` y completa la URL del proyecto Supabase y su clave publicable (o `anon`) en **Project Settings → API**.
 6. Instala y ejecuta:
 
@@ -23,33 +23,33 @@ Aplicación web adaptable a celulares y computadoras para el control de motos, �
    npm run dev
    ```
 
-7. Instala la [Supabase CLI](https://supabase.com/docs/guides/cli), inicia sesión y vincula el proyecto:
+7. La Supabase CLI está incluida como dependencia local del proyecto. Inicia sesión y vincula el proyecto desde PowerShell:
 
    ```powershell
-   supabase login
-   supabase link --project-ref TU_PROJECT_REF
+   npx supabase login
+   npx supabase link --project-ref TU_PROJECT_REF
    ```
 
-8. Despliega la función segura que envía invitaciones desde el Administrador. Sustituye la URL por el sitio Netlify publicado; añade cualquier URL local que uses a `APP_URLS` separándola por comas:
+8. Despliega la función segura que crea cuentas y establece contraseñas desde el Administrador. Sustituye la URL por el sitio Netlify publicado; añade cualquier URL local que uses a `APP_URLS` separándola por comas:
 
    ```powershell
-   supabase secrets set APP_URL="https://tu-sitio.netlify.app" APP_URLS="https://tu-sitio.netlify.app,http://localhost:5173"
-   supabase functions deploy admin-create-user
+   npx supabase secrets set APP_URLS="https://tu-sitio.netlify.app,http://localhost:5173"
+   npx supabase functions deploy admin-create-user
    ```
 
    La función usa las variables administradas `SUPABASE_URL`, `SUPABASE_ANON_KEY` y `SUPABASE_SERVICE_ROLE_KEY` del entorno de Supabase. La clave `service_role` nunca debe copiarse a la aplicación ni a Netlify.
 9. En Netlify, importa esta carpeta como sitio. La configuración de `netlify.toml` define `npm run build` y `dist`. Crea `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` en **Site configuration → Environment variables** y publica el sitio. Añade la URL publicada a **Authentication → URL Configuration** en Supabase.
-10. Inicia sesión con el Administrador y usa **Equipo → Crear usuario** para invitar al personal.
+10. Inicia sesión con el Administrador y usa **Equipo → Crear usuario** para crear las cuentas del personal.
 
-## Correo de invitación y recuperación
+## Contraseñas y correo
 
-Para entregar invitaciones y enlaces de recuperación a cualquier correo, configura un proveedor SMTP propio en **Supabase → Authentication → SMTP Settings**. El servicio SMTP de prueba de Supabase puede restringir destinatarios a miembros del equipo del proyecto y aplicar límites de envío; no es fiable para producción. Configura el host, puerto, usuario, contraseña SMTP y remitente del proveedor, y revisa **Authentication → Logs** si un mensaje no llega. No pongas la contraseña SMTP en Netlify, GitHub ni en el código de la aplicación.
+No se envían invitaciones ni enlaces de restablecimiento: las cuentas se confirman al crearse y el Administrador puede establecer una contraseña nueva desde **Equipo → Editar cuenta**. Si una persona olvida su contraseña, debe contactar al Administrador. El correo se usa como nombre de usuario de Supabase, pero no se envía ningún mensaje a esa dirección. No compartas contraseñas en canales públicos; usa una contraseña única para cada cuenta.
 
 ## Permisos
 
-- **Administrador:** puede consultar y editar clientes y todas las órdenes, importar datos, crear órdenes, asignar técnicos y gestionar los nombres y roles de las cuentas.
+- **Administrador:** puede consultar y editar clientes y todas las órdenes, importar datos, crear órdenes, asignar técnicos y gestionar las cuentas, roles y contraseñas.
 - **Técnico:** solo consulta las órdenes asignadas a su cuenta y los clientes vinculados a esas órdenes. No puede modificar registros ni consultar adelantos, pagos o ganancias. Estas reglas se aplican en PostgreSQL con Row Level Security y una vista limitada, no solo en la interfaz.
-- Las nuevas cuentas se invitan desde **Equipo** usando una función de Supabase protegida con JWT y verificación del rol Administrador. La aplicación nunca administra ni almacena contraseñas. El esquema bloquea la eliminación o degradación del último Administrador.
+- Las nuevas cuentas se crean desde **Equipo** usando una función de Supabase protegida con JWT y verificación del rol Administrador. Las contraseñas se envían directamente a Supabase; nunca se guardan en la base de datos de la aplicación ni se registran en la función. El esquema bloquea la eliminación o degradación del último Administrador.
 
 ## Importación del Excel
 
