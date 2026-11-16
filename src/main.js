@@ -929,6 +929,23 @@ async function start() {
     return;
   }
   state.passwordRecovery = new URLSearchParams(window.location.hash.slice(1)).get('type') === 'recovery';
+  let authInitialized = false;
+  supabase.auth.onAuthStateChange((event, session) => {
+    state.session = session;
+    if (event === 'PASSWORD_RECOVERY') state.passwordRecovery = true;
+    if (!session) {
+      state.passwordRecovery = false;
+      state.profile = null;
+      state.page = 'dashboard';
+      state.orders = [];
+      state.customers = [];
+      state.profiles = [];
+      if (authInitialized) renderApp();
+      return;
+    }
+    if (authInitialized) window.setTimeout(() => refresh(), 0);
+  });
+
   const result = await supabase.auth.getSession();
   if (result.error) {
     renderLogin(errorMessage(result.error));
@@ -936,20 +953,7 @@ async function start() {
   }
   state.session = result.data.session;
   await refresh();
-  supabase.auth.onAuthStateChange((event, session) => {
-    state.session = session;
-    if (event === 'PASSWORD_RECOVERY') state.passwordRecovery = true;
-    if (!session) {
-      state.profile = null;
-      state.page = 'dashboard';
-      state.orders = [];
-      state.customers = [];
-      state.profiles = [];
-      renderApp();
-      return;
-    }
-    window.setTimeout(() => refresh(), 0);
-  });
+  authInitialized = true;
 }
 
 start().catch((error) => {
