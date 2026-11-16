@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.env
+.netlify/
+supabase/.env.local
+Control_Estado de motos en Taller.xlsx
