@@ -398,7 +398,7 @@ async function refresh() {
 
 async function handleLogin(event) {
   event.preventDefault();
-  const form = event.currentTarget;
+  const form = event.target;
   const button = form.querySelector('button[type="submit"]');
   setBusy(button, true, 'Ingresando…');
   try {
@@ -455,7 +455,7 @@ async function resetPassword(button) {
 
 async function saveRecoveredPassword(event) {
   event.preventDefault();
-  const form = event.currentTarget;
+  const form = event.target;
   const values = formValues(form);
   if (values.password !== values.confirm_password) {
     showToast('Las contraseñas no coinciden.', 'error');
@@ -510,7 +510,7 @@ function orderPayload(values) {
 
 async function saveOrder(event) {
   event.preventDefault();
-  const form = event.currentTarget;
+  const form = event.target;
   const button = form.querySelector('button[type="submit"]');
   setBusy(button, true);
   try {
@@ -551,7 +551,7 @@ async function saveOrder(event) {
 
 async function saveCustomer(event) {
   event.preventDefault();
-  const form = event.currentTarget;
+  const form = event.target;
   const button = form.querySelector('button[type="submit"]');
   setBusy(button, true);
   try {
@@ -589,7 +589,7 @@ async function saveCustomer(event) {
 
 async function saveProfile(event) {
   event.preventDefault();
-  const form = event.currentTarget;
+  const form = event.target;
   const button = form.querySelector('button[type="submit"]');
   setBusy(button, true);
   try {
@@ -840,7 +840,7 @@ function createUserForm() {
 
 async function createUser(event) {
   event.preventDefault();
-  const form = event.currentTarget;
+  const form = event.target;
   const button = form.querySelector('button[type="submit"]');
   setBusy(button, true, 'Enviando invitación…');
   try {
