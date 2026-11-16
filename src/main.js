@@ -417,15 +417,40 @@ async function handleLogin(event) {
   }
 }
 
-async function resetPassword() {
-  const email = document.querySelector('#login-form [name="email"]')?.value.trim();
-  if (!email) {
-    showToast('Escribe tu correo para enviarte el enlace de recuperación.', 'error');
+function passwordResetError(error) {
+  const message = errorMessage(error);
+  const lowerMessage = message.toLowerCase();
+  if (lowerMessage.includes('email address not authorized')) {
+    return 'Supabase aún no puede enviar correos a esta dirección. Configura un proveedor SMTP en Authentication → SMTP Settings.';
+  }
+  if (lowerMessage.includes('rate limit') || lowerMessage.includes('too many requests')) {
+    return 'Se alcanzó el límite de correos de prueba. Inténtalo más tarde o configura un proveedor SMTP en Supabase.';
+  }
+  if (lowerMessage.includes('invalid format') || lowerMessage.includes('invalid email')) {
+    return 'Escribe un correo electrónico válido.';
+  }
+  return message;
+}
+
+async function resetPassword(button) {
+  const input = document.querySelector('#login-form [name="email"]');
+  const email = input?.value.trim();
+  if (!input || !email || !input.checkValidity()) {
+    showToast('Escribe un correo electrónico válido para enviarte el enlace.', 'error');
+    input?.focus();
     return;
   }
-  const result = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
-  if (result.error) throw result.error;
-  showToast('Si el correo está registrado, recibirás el enlace de recuperación.');
+
+  setBusy(button, true, 'Enviando enlace…');
+  try {
+    const result = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+    if (result.error) throw result.error;
+    showToast('Si el correo está registrado, recibirás el enlace de recuperación. Revisa también la carpeta de spam.');
+  } catch (error) {
+    showToast(passwordResetError(error), 'error');
+  } finally {
+    setBusy(button, false);
+  }
 }
 
 async function saveRecoveredPassword(event) {
@@ -878,7 +903,7 @@ document.addEventListener('click', async (event) => {
       state.profiles = [];
       renderApp();
     } else if (action === 'reset-password') {
-      await resetPassword();
+      await resetPassword(actionButton);
     } else if (action === 'new-order') {
       editOrder('');
     } else if (action === 'edit-order') {

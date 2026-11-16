@@ -41,6 +41,10 @@ Aplicación web adaptable a celulares y computadoras para el control de motos, �
 9. En Netlify, importa esta carpeta como sitio. La configuración de `netlify.toml` define `npm run build` y `dist`. Crea `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` en **Site configuration → Environment variables** y publica el sitio. Añade la URL publicada a **Authentication → URL Configuration** en Supabase.
 10. Inicia sesión con el Administrador y usa **Equipo → Crear usuario** para invitar al personal.
 
+## Correo de invitación y recuperación
+
+Para entregar invitaciones y enlaces de recuperación a cualquier correo, configura un proveedor SMTP propio en **Supabase → Authentication → SMTP Settings**. El servicio SMTP de prueba de Supabase puede restringir destinatarios a miembros del equipo del proyecto y aplicar límites de envío; no es fiable para producción. Configura el host, puerto, usuario, contraseña SMTP y remitente del proveedor, y revisa **Authentication → Logs** si un mensaje no llega. No pongas la contraseña SMTP en Netlify, GitHub ni en el código de la aplicación.
+
 ## Permisos
 
 - **Administrador:** puede consultar y editar clientes y todas las órdenes, importar datos, crear órdenes, asignar técnicos y gestionar los nombres y roles de las cuentas.
